@@ -3,10 +3,5 @@
 *.out
 
 # Big Data
-all.dta
+*.dta
 all.idx
-example.dta
-output_base.dta
-output_hidden.dta
-output_probe.dta
-qual.dta
