@@ -7,6 +7,7 @@
 #include <sstream>
 #include <fstream>
 #include <string>
+#include <unistd.h>
 
 using namespace std;
 
@@ -26,6 +27,7 @@ using namespace std;
 #define OUTPUT_FILE_PATH_4 "../data/output_probe.dta"
 
 #define RESULTS_FILE_PATH_QUAL "../data/results_qual.dta"
+#define SHUFFLED_DATA "../data/shuf.dta"
 
 #define GLOBAL_MEAN 3.5126
 
@@ -55,7 +57,7 @@ class SVD{
       SVD(int k_factors, double regularize1, double regularize2, double learning_rate); // Constructor
       ~SVD(); // destructor
       double predict(double *curr_pu, double *curr_qi, double curr_bu, double curr_bi);
-      double train(string train_file);
+      double train(string train_file, int iters);
       double get_error();
       void write_results(string write_file, string in_file);
 };
@@ -83,6 +85,15 @@ SVD::SVD(int k_factors, double regularize1, double regularize2, double learning_
     pu = new double*[NUM_USERS];  // user matrix
     qi = new double*[NUM_MOVIES]; // movie matrix
 
+
+    // init the bu and bi bias arrays
+    for (int i = 0; i < NUM_USERS; i++){
+       bu[i] = 0.0;
+    }
+
+    for (int i = 0; i < NUM_MOVIES; i++){
+      bi[i] = 0.0;
+    }
     // create 2D array pu
     for(int i = 0; i < NUM_USERS; i++){
       pu[i] = new double[k];
@@ -116,7 +127,16 @@ SVD::SVD(int k_factors, double regularize1, double regularize2, double learning_
 
 // Destructor
 SVD::~SVD() {
-
+  delete[] bu;
+  delete[] bi;
+  for (int i = 0; i < NUM_USERS; i++){
+    delete[] pu[i];
+  }
+  for(int i = 0; i < NUM_MOVIES; i++){
+    delete[] qi[i];
+  }
+  delete[] pu;
+  delete[] qi;
 }
 
 /*
@@ -125,56 +145,71 @@ SVD::~SVD() {
  *
  * @param train_file : the name of the file containing the training data
  */
-double SVD::train(string train_file){
-  // reading file line by line
-  ifstream infile(train_file);
-  string line;
-  // while not the end of the file
-  int counter = 0;
-  while (getline(infile, line)){
-    // read in current line, separate line into 4 data points
-    // user number, movie number, date number, rating
-    istringstream iss(line);
-    // u : user number
-    // i : movie number
-    // d : date number
-    // y : rating
-    int u, i, d, y;
-    //cout << u << " " << i << " "  << d << " " << y << "\n";
-    if (!(iss >> u >> i >> d >> y)) { break; }
-    // Change from 1-indexed to 0-indexed
-    u = u - 1;
-    i = i - 1;
-
-    // START OF TRAINING
-    double error = y - predict(pu[u], qi[i], bu[u], bi[i]);
-    //printf("old error = %f \n", error);
-    // update the biases
-    bu[u] += eta * (error - reg1 * bu[u]);
-    bi[i] += eta * (error - reg1 * bi[i]);
-
-    // use movieNumber, userNumber to index matrices for SVD
-    // compute gradients of current user/ movie matrix
+double SVD::train(string train_file, int iters){
     double * grad_pu = new double[k];
     double * grad_qi = new double[k];
-    for (int j = 0; j < k; j++){
-      grad_pu[j] = reg1 * pu[u][j] - error * qi[i][j];
-    }
-    for (int j = 0; j < k; j++){
-      grad_qi[j] = reg1 * qi[i][j] - error * pu[u][j];
-    }
-    for (int j = 0; j < k; j++){
-      pu[u][j] = pu[u][j] - eta*grad_pu[j];
-    }
-    for (int j = 0; j < k; j++){
-      qi[i][j] = qi[i][j] - eta*grad_qi[j];
-    }
-    double new_error = y - predict(pu[u], qi[i], bu[u], bi[i]);
-    //printf("new error = %f \n", new_error);
-    counter += 1;
-    cout << "in train " << counter << "\n";
-  }
+    // Shuffle data to file SHUFFLED_DATA
+    for (int m = 0; m < iters; m++)
+    {
+      cout << "Iter: " << m << endl;
 
+      string command = "gshuf " + train_file + " > " + SHUFFLED_DATA;
+      system(command.c_str());
+      cout << "Shuffled data" << endl;
+
+      // reading file line by line
+      ifstream infile(SHUFFLED_DATA);
+      string line;
+      // while not the end of the file
+      int counter = 0;
+      while (getline(infile, line)){
+        // read in current line, separate line into 4 data points
+        // user number, movie number, date number, rating
+        istringstream iss(line);
+        // u : user number
+        // i : movie number
+        // d : date number
+        // y : rating
+        int u, i, d, y;
+        //cout << u << " " << i << " "  << d << " " << y << "\n";
+        if (!(iss >> u >> i >> d >> y)) { break; }
+        // Change from 1-indexed to 0-indexed
+        u = u - 1;
+        i = i - 1;
+
+        // START OF TRAINING
+        double error = y - predict(pu[u], qi[i], bu[u], bi[i]);
+        //printf("old error = %f \n", error);
+        // update the biases
+        bu[u] += eta * (error - reg1 * bu[u]);
+        bi[i] += eta * (error - reg1 * bi[i]);
+
+        // use movieNumber, userNumber to index matrices for SVD
+        // compute gradients of current user/ movie matrix
+        for (int j = 0; j < k; j++){
+          grad_pu[j] = reg1 * pu[u][j] - error * qi[i][j];
+        }
+        for (int j = 0; j < k; j++){
+          grad_qi[j] = reg1 * qi[i][j] - error * pu[u][j];
+        }
+        for (int j = 0; j < k; j++){
+          pu[u][j] = pu[u][j] - eta*grad_pu[j];
+        }
+        for (int j = 0; j < k; j++){
+          qi[i][j] = qi[i][j] - eta*grad_qi[j];
+        }
+
+        double new_error = y - predict(pu[u], qi[i], bu[u], bi[i]);
+        //printf("new error = %f \n", new_error);
+        counter += 1;
+        // if (counter % 1000000 == 0){
+        //   cout << "in train " << counter << "\n";
+        // }
+
+        }
+      }
+      delete[] grad_pu;
+      delete[] grad_qi;
   return 0;
 
 }
@@ -189,13 +224,13 @@ double SVD::train(string train_file){
  * @param curr_bi : corresponding movie bias term
  */
 double SVD::predict(double *curr_pu, double *curr_qi, double curr_bu, double curr_bi){
-	double product = 0;
-	for (int i = 0; i < k; i++){
-		product += (curr_pu[i] * curr_qi[i]);
-	}
-  product += (curr_bu + curr_bi + GLOBAL_MEAN);
-  //cout << "predict_result" << product << endl;
-	return product;
+    double product = 0;
+    for (int i = 0; i < k; i++){
+        product += (curr_pu[i] * curr_qi[i]);
+    }
+    product += (curr_bu + curr_bi + GLOBAL_MEAN);
+    //cout << "predict_result" << product << endl;
+    return product;
 }
 
 
@@ -248,7 +283,9 @@ void SVD::write_results(string write_file, string in_file){
 
     error_sum += (y - rating) * (y - rating);
     counter += 1;
-    cout << counter << "\n";
+    // if (counter % 10000 == 0){
+    //   cout << "in test " << counter << "\n";
+    //
     qual_results << rating << "\n";
     // cout << "rating" << rating << "\n";
   }
@@ -262,8 +299,15 @@ void SVD::write_results(string write_file, string in_file){
 
 int main(int argc, char* argv[])
 {
-  SVD test_svd = SVD(20, 0.1, 0.1, 0.1);
-  test_svd.train(OUTPUT_FILE_PATH_1);
-  test_svd.write_results(RESULTS_FILE_PATH_QUAL, OUTPUT_FILE_PATH_2);
+  int latent_factors = 200;
+  int epochs = 5;
+  double reg1 = 0.02;
+  double reg2 = 0.02;
+  double learning_rate = 0.005;
+  SVD* test_svd = new SVD(latent_factors, reg1, reg2, learning_rate);
+
+  test_svd->train(OUTPUT_FILE_PATH_1, epochs);
+  test_svd->write_results(RESULTS_FILE_PATH_QUAL, OUTPUT_FILE_PATH_2);
+  delete test_svd;
   return 0;
 }
