@@ -66,6 +66,7 @@ class SVDpp{
       double predict(double *curr_pu, double *curr_qi, double curr_bu, double curr_bi, double * ru_factor_sum);
       double train(string train_file, int iters);
       double get_error();
+      void validate(string valid_file);
       void write_results(string write_file, string in_file);
 };
 
@@ -312,7 +313,7 @@ double SVDpp::train(string train_file, int iters){
 
       }
     // Decrease step size eta by multiplying by 0.9 each epoch
-    eta = eta * 0.9;
+    // eta = eta * 0.9;
 
     infile.close();
   }
@@ -360,24 +361,22 @@ double SVDpp::predict(double *curr_pu, double *curr_qi, double curr_bu,
 // }
 //
 
-
 /*
- * This function writes the predicted ratings for the qual.dta data points.
+ * This function uses the validation set to determine test error
  *
- * @param write_file : the name of the file to write ratings to
+ * @param valid_file : the name of the file to check ratings against
  */
-void SVDpp::write_results(string write_file, string in_file){
-  ifstream qual_data(in_file);
+void SVDpp::validate(string valid_file){
+  ifstream valid_data(valid_file);
   ofstream qual_results;
-  qual_results.open(write_file);
-  string qual_line;
+  string valid_line;
   double rating = 0.0;
   double error_sum = 0.0;
   int counter = 0;
   int u, i, d, y;
 
-  while(getline(qual_data, qual_line)){
-    istringstream iss(qual_line);
+  while(getline(valid_data, valid_line)){
+    istringstream iss(valid_line);
 
     //cout << u << " " << i << " "  << d << " " << y << "\n";
     if (!(iss >> u >> i >> d >> y)) { break; }
@@ -395,15 +394,51 @@ void SVDpp::write_results(string write_file, string in_file){
 
     error_sum += (y - rating) * (y - rating);
     counter += 1;
-    // if (counter % 10000 == 0){
-    //   cout << "in test " << counter << "\n";
-    //
-    qual_results << rating << "\n";
-    // cout << "rating" << rating << "\n";
   }
-  error_sum /= counter;
+  if (counter != 0) {
+    error_sum /= counter;
+  }
   error_sum = sqrt(error_sum);
   cout << "in test " << "error = " << error_sum << "\n";
+
+  valid_data.close();
+}
+
+
+/*
+ * This function writes the predicted ratings for the qual.dta data points.
+ *
+ * @param write_file : the name of the file to write ratings to
+ */
+void SVDpp::write_results(string write_file, string in_file){
+  ifstream qual_data(in_file);
+  ofstream qual_results;
+  qual_results.open(write_file);
+  string qual_line;
+  double rating = 0.0;
+  double error_sum = 0.0;
+  int counter = 0;
+  int u, i, d;
+
+  while(getline(qual_data, qual_line)){
+    istringstream iss(qual_line);
+
+    //cout << u << " " << i << " "  << d << " " << y << "\n";
+    if (!(iss >> u >> i >> d)) { break; }
+    u = u - 1;
+    i = i - 1;
+    // cout << qual_line << "\n";
+    rating = predict(pu[u], qi[i], bu[u], bi[i], Ru_array[u]);
+    // cout << "prediction " << rating << "\n";
+    if (rating > 5.0) {
+      rating = 5.0;
+    }
+    else if (rating < 1.0) {
+      rating = 1.0;
+    }
+    qual_results << rating << "\n";
+  }
+  cout << "finished writing predictions" << "\n";
 
   qual_data.close();
   qual_results.close();
@@ -419,7 +454,8 @@ int main(int argc, char* argv[])
   SVDpp* test_svdpp = new SVDpp(latent_factors, reg1, reg2, learning_rate);
 
   test_svdpp->train(FILE_PATH_SMALL, epochs);
-  test_svdpp->write_results(RESULTS_FILE_PATH_QUAL, OUTPUT_FILE_PATH_2);
+  test_svdpp->validate(OUTPUT_FILE_PATH_2);
+  test_svdpp->write_results(RESULTS_FILE_PATH_QUAL, FILE_PATH_QUAL);
   delete test_svdpp;
   return 0;
 }
