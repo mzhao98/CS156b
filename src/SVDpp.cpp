@@ -11,7 +11,7 @@
 
 using namespace std;
 
-// #include "SVD.hpp"
+// #include "SVDpp.hpp"
 
 #define NUM_USERS 458293
 #define NUM_MOVIES 17770
@@ -39,7 +39,7 @@ struct movie_rating {
 /*
  * A class to perform SVD on the Netflix data to get user prediction ratings
  */
-class SVD{
+class SVDpp{
   public:
       /*
        * Public variables
@@ -52,7 +52,8 @@ class SVD{
       double reg1; // first regularization term
       double reg2; // second regularization term
       double eta;  // the learning
-      double *y_factor;
+      double **y_factor; // matrix of item factors, users x movies size
+      double **Ru_array; // user x factors size
 
       //double **y;  // matrix of factor vectors for y_i
       // int *Ru;
@@ -60,9 +61,9 @@ class SVD{
       // double **data; /* input data matrix */
       // std::string train_filename;
 
-      SVD(int k_factors, double regularize1, double regularize2, double learning_rate); // Constructor
-      ~SVD(); // destructor
-      double predict(double *curr_pu, double *curr_qi, double curr_bu, double curr_bi);
+      SVDpp(int k_factors, double regularize1, double regularize2, double learning_rate); // Constructor
+      ~SVDpp(); // destructor
+      double predict(double *curr_pu, double *curr_qi, double curr_bu, double curr_bi, double * ru_factor_sum);
       double train(string train_file, int iters);
       double get_error();
       void write_results(string write_file, string in_file);
@@ -78,7 +79,7 @@ class SVD{
  * @param learning_rate : the learning rate for every iteration
  */
 
-SVD::SVD(int k_factors, double regularize1, double regularize2, double learning_rate)
+SVDpp::SVDpp(int k_factors, double regularize1, double regularize2, double learning_rate)
 {
     reg1 = regularize1;
     reg2 = regularize2;
@@ -88,9 +89,10 @@ SVD::SVD(int k_factors, double regularize1, double regularize2, double learning_
     bu = new double[NUM_USERS];   // user biases
     bi = new double[NUM_MOVIES];  // movie biases
     // Ru = new int[NUM_USERS];   // number of movies a user has rated
+    Ru_array = new double*[NUM_USERS];
     pu = new double*[NUM_USERS];  // user matrix
     qi = new double*[NUM_MOVIES]; // movie matrix
-    y = new double[NUM_MOVIES];
+    y_factor = new double*[NUM_MOVIES];
 
 
     // init the bu and bi bias arrays
@@ -100,11 +102,7 @@ SVD::SVD(int k_factors, double regularize1, double regularize2, double learning_
 
     for (int i = 0; i < NUM_MOVIES; i++){
       bi[i] = 0.0;
-      y[i] = 0.0;
-    }
-    // create 2D array pu
-    for(int i = 0; i < NUM_USERS; i++){
-      pu[i] = new double[k];
+
     }
 
     // Create random number generator for generating from -0.5 to 0.5
@@ -112,29 +110,38 @@ SVD::SVD(int k_factors, double regularize1, double regularize2, double learning_
     std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
     std::uniform_real_distribution<double> dis(-0.5, 0.5); // Uniform distribution
 
-    // initialize pu to small random variables
+    // create 2D array pu
+    for(int i = 0; i < NUM_USERS; i++){
+      pu[i] = new double[k];
+      Ru_array[i] = new double[k];
+    }
+
+    // initialize pu to small random variables and Ru_array to 0.0
     int n, m;
     for (n = 0; n < NUM_USERS; n++){
 	    for (m = 0; m < k; m++){
 	      pu[n][m] = dis(gen);
+        Ru_array[n][m] = 0.0;
 	    }
 	   }
 
-    // create 2D array qi
+    // create 2D arrays qi and y_factor
     for(int i = 0; i < NUM_MOVIES; i++){
       qi[i] = new double[k];
+      y_factor[i] = new double[k];
     }
 
-    // init qi to all 0.1
+    // init qi and y_factor to all small random variables and 0 respectively
     for (n = 0; n < NUM_MOVIES; n++){
 	    for (m = 0; m < k; m++){
 	      qi[n][m] = dis(gen);
+        y_factor[n][m] = 0.0;
 	    }
 	   }
 }
 
 // Destructor
-SVD::~SVD() {
+SVDpp::~SVDpp() {
   delete[] bu;
   delete[] bi;
   for (int i = 0; i < NUM_USERS; i++){
@@ -153,72 +160,121 @@ SVD::~SVD() {
  *
  * @param train_file : the name of the file containing the training data
  */
-double SVD::train(string train_file, int iters){
+double SVDpp::train(string train_file, int iters){
+
+    double * factor_sum = new double[k];
     double * grad_pu = new double[k];
     double * grad_qi = new double[k];
     vector<movie_rating> actual_rating;
     vector<int> Ru;
-    int prev_user = 1;
-    int curr_user = 1;
+    int u, i, d, y;
+    int prev_user;
+    int curr_user;
+    bool not_finished; // signals that we have reached end of training file
 
     // Shuffle data to file SHUFFLED_DATA
     for (int m = 0; m < iters; m++)
     {
+      prev_user = 0;
+      curr_user = 0;
+      not_finished = true;
       cout << "Iter: " << m << endl;
 
+      /* The below commented code shuffles the lines in the training data */
+      // ***********************************************************************
       // string command = "gshuf " + train_file + " > " + SHUFFLED_DATA;
       // system(command.c_str());
       // cout << "Shuffled data" << endl;
+      // ***********************************************************************
 
-      // reading file line by line
-      // ifstream infile(SHUFFLED_DATA);
-      ifstream infile(train_file)
+
+      // ***********************************************************************
+      // - Read in training file line by line.
+      // - We keep all movie_id, rating pairs for a particular user in the
+      //    move_rating vector, and all movie_ids a user rated in the Ru vector.
+      // - After we have collected all the ratings for a user, we update the
+      //    bi, bu, qi, qu, and factor_sum arrays according to the collected
+      //    data.
+      // ***********************************************************************
+      ifstream infile(train_file);
       string line;
-      // while not the end of the file
       int counter = 0;
-      while (getline(infile, line)){
-        // read in current line, separate line into 4 data points
-        // user number, movie number, date number, rating
-        istringstream iss(line);
-        // u : user number
-        // i : movie number
-        // d : date number
-        // y : rating
-        int u, i, d, y;
-        //cout << u << " " << i << " "  << d << " " << y << "\n";
-        if (!(iss >> u >> i >> d >> y)) { break; }
-        // Change from 1-indexed to 0-indexed
-        u = u - 1;
-        i = i - 1;
+      while (not_finished){
+        if (!getline(infile, line)) {
+          not_finished = false; // we have reached the end of the training file
+          curr_user = -1; // set to arbitrary value so that prev_user != curr_user
+        }
+        else {
+          // read in current line, separate line into 4 data points :
+          // u : user number
+          // i : movie number
+          // d : date number
+          // y : rating
+          istringstream iss(line);
 
-        curr_user = u;
+          if (!(iss >> u >> i >> d >> y)) { break; }
+          // Change from 1-indexed to 0-indexed
+          u = u - 1;
+          i = i - 1;
 
+          curr_user = u;
+        }
+
+        // start training when we have collected all ratings for a user
         if (prev_user != curr_user){
+          int user_u = prev_user;
+
+          int Ru_size = Ru.size(); // number of movies the current user has rated
+          for (int i = 0; i < k; i++) { factor_sum[i] = 0.0; }
+          double ru_sqrt = pow(double(Ru_size), -1.5);
+          for (int i = 0; i < Ru_size; i++) {
+            for (int j = 0; j < k; j++){
+              factor_sum[j] += y_factor[Ru[i]][j];
+            }
+          }
+          for (int j = 0; j < k; j++) { factor_sum[j] *= ru_sqrt; }
+
           // Update
-          for movie_rating in actual_rating.size(){
+          for (int movie_index = 0; movie_index < actual_rating.size(); movie_index++){
+
+            int movie_i = actual_rating[movie_index].id;
+            int rating_y = actual_rating[movie_index].rating;
 
             // to define
-            double error = y - predict(pu[u], qi[i], bu[u], bi[i]);
+            double error = rating_y - predict(pu[user_u], qi[movie_i],
+                           bu[user_u], bi[movie_i], factor_sum);
 
-            bu[prev_user] += eta * (error - reg1 * bu[prev_user]);
-            bi[i] += eta * (error - reg1 * bi[i]);
-
+            bu[user_u] += eta * (error - reg1 * bu[user_u]);
+            bi[movie_i] += eta * (error - reg1 * bi[movie_i]);
 
 
             for (int j = 0; j < k; j++){
-              grad_pu[j] = reg1 * pu[u][j] - error * qi[i][j];
+              grad_pu[j] = reg2 * pu[user_u][j] - error * qi[movie_i][j];
             }
             for (int j = 0; j < k; j++){
-              grad_qi[j] = reg1 * qi[i][j] - error * pu[u][j];
+              grad_qi[j] = reg2 * qi[movie_i][j] - error * (pu[user_u][j] +
+                           factor_sum[j]);
             }
             for (int j = 0; j < k; j++){
-              pu[u][j] = pu[u][j] - eta*grad_pu[j];
+              pu[user_u][j] = pu[user_u][j] - eta*grad_pu[j];
             }
             for (int j = 0; j < k; j++){
-              qi[i][j] = qi[i][j] - eta*grad_qi[j];
+              qi[movie_i][j] = qi[movie_i][j] - eta*grad_qi[j];
             }
 
-            double new_error = y - predict(pu[u], qi[i], bu[u], bi[i]);
+            // Update y for each movie j in Ru and  for each factor f in k
+            // y_factor[j] += eta*(error * ru_sqrt * q[movie_i] - reg2 * y_factor[j])
+            for (int j = 0; j < Ru_size; j++) {
+              for (int f = 0; f < k; f++) {
+                y_factor[j][f] += eta*(error * ru_sqrt * qi[movie_i][f]
+                                       - reg2 * y_factor[j][f]);
+              }
+            }
+
+            // Update Ru_array for user_u for each factor f
+            for (int f = 0; f < k; f++) {
+              Ru_array[user_u][f] = factor_sum[f];
+            }
 
           }
           // clear our user and ratings arrays
@@ -228,9 +284,15 @@ double SVD::train(string train_file, int iters){
 
         prev_user = curr_user;
         counter += 1;
-        movie_rating curr_rating = {i, y};
+        movie_rating curr_rating;
+        curr_rating.id = i;
+        curr_rating.rating = y;
+
         actual_rating.push_back(curr_rating);
-        Ru.push_back(i);
+        // Add movie ID only if it doesn't already exist in Ru
+        if (!(std::find(Ru.begin(), Ru.end(), i) != Ru.end())) {
+          Ru.push_back(i);
+        }
 
 
         // START OF TRAINING
@@ -248,10 +310,14 @@ double SVD::train(string train_file, int iters){
         //   cout << "in train " << counter << "\n";
         // }
 
-        }
       }
-      delete[] grad_pu;
-      delete[] grad_qi;
+
+    infile.close();
+  }
+
+  delete[] grad_pu;
+  delete[] grad_qi;
+  delete[] factor_sum;
   return 0;
 
 }
@@ -265,10 +331,12 @@ double SVD::train(string train_file, int iters){
  * @param curr_bu : corresponding user bias term
  * @param curr_bi : corresponding movie bias term
  */
-double SVD::predict(double *curr_pu, double *curr_qi, double curr_bu, double curr_bi){
+double SVDpp::predict(double *curr_pu, double *curr_qi, double curr_bu,
+                      double curr_bi, double *ru_factor_sum) {
     double product = 0;
+
     for (int i = 0; i < k; i++){
-        product += (curr_pu[i] * curr_qi[i]);
+        product += (curr_pu[i] * (curr_qi[i] + ru_factor_sum[i]));
     }
     product += (curr_bu + curr_bi + GLOBAL_MEAN);
     //cout << "predict_result" << product << endl;
@@ -296,7 +364,7 @@ double SVD::predict(double *curr_pu, double *curr_qi, double curr_bu, double cur
  *
  * @param write_file : the name of the file to write ratings to
  */
-void SVD::write_results(string write_file, string in_file){
+void SVDpp::write_results(string write_file, string in_file){
   ifstream qual_data(in_file);
   ofstream qual_results;
   qual_results.open(write_file);
@@ -314,7 +382,7 @@ void SVD::write_results(string write_file, string in_file){
     u = u - 1;
     i = i - 1;
     // cout << qual_line << "\n";
-    rating = predict(pu[u], qi[i], bu[u], bi[i]);
+    rating = predict(pu[u], qi[i], bu[u], bi[i], Ru_array[u]);
     // cout << "prediction " << rating << "\n";
     if (rating > 5.0) {
       rating = 5.0;
@@ -345,11 +413,11 @@ int main(int argc, char* argv[])
   int epochs = 5;
   double reg1 = 0.02;
   double reg2 = 0.02;
-  double learning_rate = 0.005;
-  SVD* test_svd = new SVD(latent_factors, reg1, reg2, learning_rate);
+  double learning_rate = 0.01;
+  SVDpp* test_svdpp = new SVDpp(latent_factors, reg1, reg2, learning_rate);
 
-  test_svd->train(OUTPUT_FILE_PATH_1, epochs);
-  test_svd->write_results(RESULTS_FILE_PATH_QUAL, OUTPUT_FILE_PATH_2);
-  delete test_svd;
+  test_svdpp->train(FILE_PATH_SMALL, epochs);
+  test_svdpp->write_results(RESULTS_FILE_PATH_QUAL, OUTPUT_FILE_PATH_2);
+  delete test_svdpp;
   return 0;
 }
