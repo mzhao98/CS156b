@@ -311,6 +311,8 @@ double SVDpp::train(string train_file, int iters){
         // }
 
       }
+    // Decrease step size eta by multiplying by 0.9 each epoch
+    eta = eta * 0.9;
 
     infile.close();
   }
@@ -411,9 +413,9 @@ int main(int argc, char* argv[])
 {
   int latent_factors = 200;
   int epochs = 5;
-  double reg1 = 0.02;
-  double reg2 = 0.02;
-  double learning_rate = 0.01;
+  double reg1 = 0.005;
+  double reg2 = 0.015;
+  double learning_rate = 0.007;
   SVDpp* test_svdpp = new SVDpp(latent_factors, reg1, reg2, learning_rate);
 
   test_svdpp->train(FILE_PATH_SMALL, epochs);
