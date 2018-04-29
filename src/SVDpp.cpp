@@ -80,65 +80,64 @@ class SVDpp{
  * @param learning_rate : the learning rate for every iteration
  */
 
-SVDpp::SVDpp(int k_factors, double regularize1, double regularize2, double learning_rate)
-{
-    reg1 = regularize1;
-    reg2 = regularize2;
-    eta = learning_rate;
+SVDpp::SVDpp(int k_factors, double regularize1, double regularize2, double learning_rate) {
+  reg1 = regularize1;
+  reg2 = regularize2;
+  eta = learning_rate;
 
-    k = k_factors;
-    bu = new double[NUM_USERS];   // user biases
-    bi = new double[NUM_MOVIES];  // movie biases
-    // Ru = new int[NUM_USERS];   // number of movies a user has rated
-    Ru_array = new double*[NUM_USERS];
-    pu = new double*[NUM_USERS];  // user matrix
-    qi = new double*[NUM_MOVIES]; // movie matrix
-    y_factor = new double*[NUM_MOVIES];
+  k = k_factors;
+  bu = new double[NUM_USERS];   // user biases
+  bi = new double[NUM_MOVIES];  // movie biases
+  // Ru = new int[NUM_USERS];   // number of movies a user has rated
+  Ru_array = new double*[NUM_USERS];
+  pu = new double*[NUM_USERS];  // user matrix
+  qi = new double*[NUM_MOVIES]; // movie matrix
+  y_factor = new double*[NUM_MOVIES];
 
 
-    // init the bu and bi bias arrays
-    for (int i = 0; i < NUM_USERS; i++){
-       bu[i] = 0.0;
+  // init the bu and bi bias arrays
+  for (int i = 0; i < NUM_USERS; i++){
+     bu[i] = 0.0;
+  }
+
+  for (int i = 0; i < NUM_MOVIES; i++){
+    bi[i] = 0.0;
+
+  }
+
+  // Create random number generator for generating from -0.5 to 0.5
+  std::random_device rd;  //Will be used to obtain a seed for the random number engine
+  std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
+  std::uniform_real_distribution<double> dis(-0.5, 0.5); // Uniform distribution
+
+  // create 2D array pu
+  for(int i = 0; i < NUM_USERS; i++){
+    pu[i] = new double[k];
+    Ru_array[i] = new double[k];
+  }
+
+  // initialize pu to small random variables and Ru_array to 0.0
+  int n, m;
+  for (n = 0; n < NUM_USERS; n++){
+    for (m = 0; m < k; m++){
+      pu[n][m] = dis(gen);
+      Ru_array[n][m] = 0.0;
     }
+   }
 
-    for (int i = 0; i < NUM_MOVIES; i++){
-      bi[i] = 0.0;
+  // create 2D arrays qi and y_factor
+  for(int i = 0; i < NUM_MOVIES; i++){
+    qi[i] = new double[k];
+    y_factor[i] = new double[k];
+  }
 
+  // init qi and y_factor to all small random variables and 0 respectively
+  for (n = 0; n < NUM_MOVIES; n++){
+    for (m = 0; m < k; m++){
+      qi[n][m] = dis(gen);
+      y_factor[n][m] = 0.0;
     }
-
-    // Create random number generator for generating from -0.5 to 0.5
-    std::random_device rd;  //Will be used to obtain a seed for the random number engine
-    std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
-    std::uniform_real_distribution<double> dis(-0.5, 0.5); // Uniform distribution
-
-    // create 2D array pu
-    for(int i = 0; i < NUM_USERS; i++){
-      pu[i] = new double[k];
-      Ru_array[i] = new double[k];
-    }
-
-    // initialize pu to small random variables and Ru_array to 0.0
-    int n, m;
-    for (n = 0; n < NUM_USERS; n++){
-	    for (m = 0; m < k; m++){
-	      pu[n][m] = dis(gen);
-        Ru_array[n][m] = 0.0;
-	    }
-	   }
-
-    // create 2D arrays qi and y_factor
-    for(int i = 0; i < NUM_MOVIES; i++){
-      qi[i] = new double[k];
-      y_factor[i] = new double[k];
-    }
-
-    // init qi and y_factor to all small random variables and 0 respectively
-    for (n = 0; n < NUM_MOVIES; n++){
-	    for (m = 0; m < k; m++){
-	      qi[n][m] = dis(gen);
-        y_factor[n][m] = 0.0;
-	    }
-	   }
+   }
 }
 
 // Destructor
@@ -156,165 +155,146 @@ SVDpp::~SVDpp() {
 }
 
 /*
- * This function trains on the input file
- *
+ * This function trains on the input file. It performs the following tasks:
+ * - Read in training file line by line.
+ * - Keep all movie_id, rating pairs for a particular user in the
+ *   move_rating vector, and all movie_ids a user rated in the Ru vector.
+ * - After we have collected all the ratings for a user, we update the
+ *   bi, bu, qi, qu, and factor_sum arrays according to the collected
+ *   data.
  *
  * @param train_file : the name of the file containing the training data
  */
 double SVDpp::train(string train_file, int iters){
+  double * factor_sum = new double[k];
+  double * grad_pu = new double[k];
+  double * grad_qi = new double[k];
+  vector<movie_rating> actual_rating;
+  vector<int> Ru;
+  int u, i, d, y;
+  int prev_user;
+  int curr_user;
+  bool not_finished; // signals that we have reached end of training file
 
-    double * factor_sum = new double[k];
-    double * grad_pu = new double[k];
-    double * grad_qi = new double[k];
-    vector<movie_rating> actual_rating;
-    vector<int> Ru;
-    int u, i, d, y;
-    int prev_user;
-    int curr_user;
-    bool not_finished; // signals that we have reached end of training file
+  // Shuffle data to file SHUFFLED_DATA
+  for (int m = 0; m < iters; m++)
+  {
+    prev_user = 0;
+    curr_user = 0;
+    not_finished = true;
+    cout << "Iter: " << m << endl;
 
-    // Shuffle data to file SHUFFLED_DATA
-    for (int m = 0; m < iters; m++)
-    {
-      prev_user = 0;
-      curr_user = 0;
-      not_finished = true;
-      cout << "Iter: " << m << endl;
+    /* The below commented code shuffles the lines in the training data */
+    // ***********************************************************************
+    // string command = "gshuf " + train_file + " > " + SHUFFLED_DATA;
+    // system(command.c_str());
+    // cout << "Shuffled data" << endl;
+    // ***********************************************************************
 
-      /* The below commented code shuffles the lines in the training data */
-      // ***********************************************************************
-      // string command = "gshuf " + train_file + " > " + SHUFFLED_DATA;
-      // system(command.c_str());
-      // cout << "Shuffled data" << endl;
-      // ***********************************************************************
-
-
-      // ***********************************************************************
-      // - Read in training file line by line.
-      // - We keep all movie_id, rating pairs for a particular user in the
-      //    move_rating vector, and all movie_ids a user rated in the Ru vector.
-      // - After we have collected all the ratings for a user, we update the
-      //    bi, bu, qi, qu, and factor_sum arrays according to the collected
-      //    data.
-      // ***********************************************************************
-      ifstream infile(train_file);
-      string line;
-      int counter = 0;
-      while (not_finished){
-        if (!getline(infile, line)) {
-          not_finished = false; // we have reached the end of the training file
-          curr_user = -1; // set to arbitrary value so that prev_user != curr_user
-        }
-        else {
-          // read in current line, separate line into 4 data points :
-          // u : user number
-          // i : movie number
-          // d : date number
-          // y : rating
-          istringstream iss(line);
-
-          if (!(iss >> u >> i >> d >> y)) { break; }
-          // Change from 1-indexed to 0-indexed
-          u = u - 1;
-          i = i - 1;
-
-          curr_user = u;
-        }
-
-        // start training when we have collected all ratings for a user
-        if (prev_user != curr_user){
-          int user_u = prev_user;
-
-          int Ru_size = Ru.size(); // number of movies the current user has rated
-          for (int i = 0; i < k; i++) { factor_sum[i] = 0.0; }
-          double ru_sqrt = pow(double(Ru_size), -1.5);
-          for (int i = 0; i < Ru_size; i++) {
-            for (int j = 0; j < k; j++){
-              factor_sum[j] += y_factor[Ru[i]][j];
-            }
-          }
-          for (int j = 0; j < k; j++) { factor_sum[j] *= ru_sqrt; }
-
-          // Update
-          for (int movie_index = 0; movie_index < actual_rating.size(); movie_index++){
-
-            int movie_i = actual_rating[movie_index].id;
-            int rating_y = actual_rating[movie_index].rating;
-
-            // to define
-            double error = rating_y - predict(pu[user_u], qi[movie_i],
-                           bu[user_u], bi[movie_i], factor_sum);
-
-            bu[user_u] += eta * (error - reg1 * bu[user_u]);
-            bi[movie_i] += eta * (error - reg1 * bi[movie_i]);
-
-
-            for (int j = 0; j < k; j++){
-              grad_pu[j] = reg2 * pu[user_u][j] - error * qi[movie_i][j];
-            }
-            for (int j = 0; j < k; j++){
-              grad_qi[j] = reg2 * qi[movie_i][j] - error * (pu[user_u][j] +
-                           factor_sum[j]);
-            }
-            for (int j = 0; j < k; j++){
-              pu[user_u][j] = pu[user_u][j] - eta*grad_pu[j];
-            }
-            for (int j = 0; j < k; j++){
-              qi[movie_i][j] = qi[movie_i][j] - eta*grad_qi[j];
-            }
-
-            // Update y for each movie j in Ru and  for each factor f in k
-            // y_factor[j] += eta*(error * ru_sqrt * q[movie_i] - reg2 * y_factor[j])
-            for (int j = 0; j < Ru_size; j++) {
-              for (int f = 0; f < k; f++) {
-                y_factor[j][f] += eta*(error * ru_sqrt * qi[movie_i][f]
-                                       - reg2 * y_factor[j][f]);
-              }
-            }
-
-            // Update Ru_array for user_u for each factor f
-            for (int f = 0; f < k; f++) {
-              Ru_array[user_u][f] = factor_sum[f];
-            }
-
-          }
-          // clear our user and ratings arrays
-          Ru.clear();
-          actual_rating.clear();
-        }
-
-        prev_user = curr_user;
-        counter += 1;
-        movie_rating curr_rating;
-        curr_rating.id = i;
-        curr_rating.rating = y;
-
-        actual_rating.push_back(curr_rating);
-        // Add movie ID only if it doesn't already exist in Ru
-        if (!(std::find(Ru.begin(), Ru.end(), i) != Ru.end())) {
-          Ru.push_back(i);
-        }
-
-
-        // START OF TRAINING
-
-        //printf("old error = %f \n", error);
-        // update the biases
-
-
-        // use movieNumber, userNumber to index matrices for SVD
-        // compute gradients of current user/ movie matrix
-
-        //printf("new error = %f \n", new_error);
-        counter += 1;
-        // if (counter % 1000000 == 0){
-        //   cout << "in train " << counter << "\n";
-        // }
-
+    ifstream infile(train_file);
+    string line;
+    int counter = 0;
+    while (not_finished){
+      if (!getline(infile, line)) {
+        not_finished = false; // we have reached the end of the training file
+        curr_user = -1; // set to arbitrary value so that prev_user != curr_user
       }
+      else {
+        // read in current line, separate line into 4 data points :
+        // u : user number
+        // i : movie number
+        // d : date number
+        // y : rating
+        istringstream iss(line);
+
+        if (!(iss >> u >> i >> d >> y)) { break; }
+        // Change from 1-indexed to 0-indexed
+        u = u - 1;
+        i = i - 1;
+
+        curr_user = u;
+      }
+
+      // start training when we have collected all ratings for a user
+      if (prev_user != curr_user){
+        int user_u = prev_user;
+
+        int Ru_size = Ru.size(); // number of movies the current user has rated
+        for (int i = 0; i < k; i++) { factor_sum[i] = 0.0; }
+        double ru_sqrt = pow(double(Ru_size), -1.5);
+        for (int i = 0; i < Ru_size; i++) {
+          for (int j = 0; j < k; j++){
+            factor_sum[j] += y_factor[Ru[i]][j];
+          }
+        }
+        for (int j = 0; j < k; j++) { factor_sum[j] *= ru_sqrt; }
+
+        // Update parameters bu, bi, pu, qi, and y
+        // Also updates Ru_array for predicting results later
+        for (int movie_index = 0; movie_index < actual_rating.size(); movie_index++){
+
+          int movie_i = actual_rating[movie_index].id;
+          int rating_y = actual_rating[movie_index].rating;
+
+          // to define
+          double error = rating_y - predict(pu[user_u], qi[movie_i],
+                         bu[user_u], bi[movie_i], factor_sum);
+
+          bu[user_u] += eta * (error - reg1 * bu[user_u]);
+          bi[movie_i] += eta * (error - reg1 * bi[movie_i]);
+
+
+          for (int j = 0; j < k; j++){
+            grad_pu[j] = reg2 * pu[user_u][j] - error * qi[movie_i][j];
+          }
+          for (int j = 0; j < k; j++){
+            grad_qi[j] = reg2 * qi[movie_i][j] - error * (pu[user_u][j] +
+                         factor_sum[j]);
+          }
+          for (int j = 0; j < k; j++){
+            pu[user_u][j] = pu[user_u][j] - eta*grad_pu[j];
+          }
+          for (int j = 0; j < k; j++){
+            qi[movie_i][j] = qi[movie_i][j] - eta*grad_qi[j];
+          }
+
+          // Update y for each movie j in Ru and  for each factor f in k
+          // y_factor[j] += eta*(error * ru_sqrt * q[movie_i] - reg2 * y_factor[j])
+          for (int j = 0; j < Ru_size; j++) {
+            for (int f = 0; f < k; f++) {
+              y_factor[j][f] += eta*(error * ru_sqrt * qi[movie_i][f]
+                                     - reg2 * y_factor[j][f]);
+            }
+          }
+
+          // Update Ru_array for user_u for each factor f
+          for (int f = 0; f < k; f++) {
+            Ru_array[user_u][f] = factor_sum[f];
+          }
+
+        }
+        // clear our user and ratings arrays
+        Ru.clear();
+        actual_rating.clear();
+      }
+
+      prev_user = curr_user;
+      counter += 1;
+      movie_rating curr_rating;
+      curr_rating.id = i;
+      curr_rating.rating = y;
+
+      actual_rating.push_back(curr_rating);
+      // Add movie ID only if it doesn't already exist in Ru
+      if (!(std::find(Ru.begin(), Ru.end(), i) != Ru.end())) {
+        Ru.push_back(i);
+      }
+
+      counter += 1;
+
+    }
     // Decrease step size eta by multiplying by 0.9 each epoch
     // eta = eta * 0.9;
-
     infile.close();
   }
 
@@ -336,30 +316,15 @@ double SVDpp::train(string train_file, int iters){
  */
 double SVDpp::predict(double *curr_pu, double *curr_qi, double curr_bu,
                       double curr_bi, double *ru_factor_sum) {
-    double product = 0;
+  double product = 0;
 
-    for (int i = 0; i < k; i++){
-        product += (curr_pu[i] * (curr_qi[i] + ru_factor_sum[i]));
-    }
-    product += (curr_bu + curr_bi + GLOBAL_MEAN);
-    //cout << "predict_result" << product << endl;
-    return product;
+  for (int i = 0; i < k; i++){
+      product += (curr_pu[i] * (curr_qi[i] + ru_factor_sum[i]));
+  }
+  product += (curr_bu + curr_bi + GLOBAL_MEAN);
+  //cout << "predict_result" << product << endl;
+  return product;
 }
-
-
-// void dotMatrices(int i, int j, double mat1[10][10], double mat2[10][10]) {
-//
-// double mat3[10][10];
-// for (int r = 0; r < i; r++) {
-//     for (int c = 0; c < j; c++) {
-//         for (int in = 0; in < i; in++) {
-//             mat3[r][c] += mat1[r][in] * mat2[in][c];
-//         }
-//         cout << mat3[r][c] << "  ";
-//     }
-//     cout << "\n";
-// }
-//
 
 /*
  * This function uses the validation set to determine test error
