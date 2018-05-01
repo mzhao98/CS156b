@@ -347,7 +347,7 @@ void SVD::write_results(string write_file, string in_file){
 int main(int argc, char* argv[])
 {
   int latent_factors = 200;
-  int epochs = 20;
+  int epochs = 50;
   double reg1 = 0.02;
   double reg2 = 0.015;
   double learning_rate = 0.005;
