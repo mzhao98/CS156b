@@ -12,8 +12,6 @@
 #include <unistd.h>
 using namespace std;
 
-// #include "SVD.hpp"
-
 #define NUM_USERS 458293
 #define NUM_MOVIES 17770
 #define FILE_PATH_ALL     "../data/all.dta"
@@ -28,7 +26,7 @@ using namespace std;
 #define OUTPUT_FILE_PATH_3 "../data/output_hidden.dta"
 #define OUTPUT_FILE_PATH_4 "../data/output_probe.dta"
 
-#define RESULTS_FILE_PATH_QUAL "../data/results_qual.dta"
+#define RESULTS_FILE_PATH_QUAL "../data/results_qual_knn.dta"
 
 #define GLOBAL_MEAN 3.5126
 
@@ -38,7 +36,6 @@ using namespace std;
 class KNN{
   public:
     int K;
-
     int ** users;
     double *averages;
 
@@ -48,7 +45,7 @@ class KNN{
     double PearsonCorrelationCoefficient(int *ratings_user1, int *ratings_user2);
     int *getNeighbors(int user, int movie);
     double getRating(int user, int movie, int *neighbors);
-    void write_results(string write_file);
+    void write_results(string test_file, string output_file);
 };
 
 KNN::KNN(int Kval){
@@ -164,9 +161,11 @@ double KNN::PearsonCorrelationCoefficient(int * ratings_user1, int * ratings_use
 
 
 int* KNN::getNeighbors(int user, int movie){
-  double *distance = new double[NUM_USERS];
-  int *neighbors = new int[K];
+  double *distances;
+  int *neighbors;
   double corr;
+  distances = new double[NUM_USERS];
+  neighbors = new int[K];
 
   for (int i = 0; i < NUM_USERS; i++)
   {
@@ -176,20 +175,19 @@ int* KNN::getNeighbors(int user, int movie){
     else{
       corr = PearsonCorrelationCoefficient(users[user], users[i]);
     }
-    distance[i] = corr;
+    distances[i] = corr;
   }
   for (int i = 0; i < K; i++)
   {
-    int max = max_element(distance, distance + NUM_USERS)[0];
-    neighbors[i] = max;
-    distance[max] = 0;
+    int max_val = distance(distances, max_element(distances, distances + NUM_USERS));
+    neighbors[i] = max_val;
+    distances[max_val] = 0;
   }
-  delete[] distance;
+  delete[] distances;
   return neighbors;
-
 }
 
-double KNN::getRating(int user, int movie, int *neighbors){
+double KNN::getRating(int user, int movie, int* neighbors){
   int sum = 0;
   int count = 0;
   for (int i = 0; i < K; i++){
@@ -205,10 +203,10 @@ double KNN::getRating(int user, int movie, int *neighbors){
 }
 
 
-void KNN::write_results(string write_file){
-  ifstream qual_data(FILE_PATH_QUAL);
+void KNN::write_results(string test_file, string output_file){
+  ifstream qual_data(test_file);
   ofstream qual_results;
-  qual_results.open(write_file);
+  qual_results.open(output_file);
   string qual_line;
   double rating = 0.0;
   double error_sum = 0.0;
@@ -249,10 +247,13 @@ void KNN::write_results(string write_file){
 
 int main(int argc, char* argv[])
 {
-
+  cout << "create KNN object" << endl;
   KNN test_KNN = KNN(5);
+  cout << "load data" << endl;
   test_KNN.LoadData(FILE_PATH_SMALL);
-  test_KNN.write_results(RESULTS_FILE_PATH_QUAL);
+  cout << "write results" << endl;
+
+  test_KNN.write_results(FILE_PATH_QUAL, RESULTS_FILE_PATH_QUAL);
   return 0;
 
 }
