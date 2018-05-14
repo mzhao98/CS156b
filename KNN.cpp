@@ -42,13 +42,13 @@ class KNN{
     int ** users;
     double *averages;
 
-    //KNN(int Kval);
-    //~KNN();
-    //void LoadData(string train_file);
-    //double PearsonCorrelationCoefficient(int *ratings_user1, int *ratings_user2);
-    //double *getNeighbors(int user, int movie);
-    //double getRating(int user, int movie, int *neighbors);
-    //double write_results(string test_file, string output_file){
+    KNN(int Kval);
+    ~KNN();
+    void LoadData(string train_file);
+    double PearsonCorrelationCoefficient(int *ratings_user1, int *ratings_user2);
+    int *getNeighbors(int user, int movie);
+    double getRating(int user, int movie, int *neighbors);
+    void write_results(string write_file);
 };
 
 KNN::KNN(int Kval){
@@ -57,7 +57,7 @@ KNN::KNN(int Kval){
   users = new int*[NUM_USERS];
 
   for(int i = 0; i < NUM_USERS; i++){
-      users[i] = new double[NUM_MOVIES];
+      users[i] = new int[NUM_MOVIES];
   }
 
     // init qi to all 0.1
@@ -113,7 +113,7 @@ void KNN::LoadData(string train_file){
     int sum = 0;
     int length = 0;
     for (int j = 0; j < NUM_USERS; i++){
-      if(users[j][i]] != 0){
+      if(users[j][i] != 0){
         length += 1;
       }
       sum += users[j][i];
@@ -141,15 +141,15 @@ double KNN::PearsonCorrelationCoefficient(int * ratings_user1, int * ratings_use
       sum_U2 = sum_U2 + ratings_user2[i];
 
       // sum of ratings of user 1 * ratings of user 2
-      sum_U12 = sum_UR + ratings_user1[i] * ratings_user2[i];
+      sum_U12 = sum_U12 + ratings_user1[i] * ratings_user2[i];
 
       // if both users have rated this movie, increment n
       if (ratings_user1[i] * ratings_user2[i] != 0){
         n ++;
       }
       // sum of square of ratings of user 1 and 2
-      squareSum_U = squareSum_U + ratings_user1[i] * ratings_user1[i];
-      squareSum_R = squareSum_R + ratings_user2[i] * ratings_user2[i];
+      squareSum_U1 = squareSum_U1 + ratings_user1[i] * ratings_user1[i];
+      squareSum_U2 = squareSum_U2 + ratings_user2[i] * ratings_user2[i];
   }
 
   // use formula for calculating correlation coefficient.
@@ -163,12 +163,10 @@ double KNN::PearsonCorrelationCoefficient(int * ratings_user1, int * ratings_use
 
 
 
-double* KNN::getNeighbors(int user, int movie){
-  double[] distance;
-  int[] neighbors;
+int* KNN::getNeighbors(int user, int movie){
+  double *distance = new double[NUM_USERS];
+  int *neighbors = new int[K];
   double corr;
-  distance = new double[NUM_USERS];
-  neighbors = new int[K];
 
   for (int i = 0; i < NUM_USERS; i++)
   {
@@ -182,7 +180,7 @@ double* KNN::getNeighbors(int user, int movie){
   }
   for (int i = 0; i < K; i++)
   {
-    max = max_element(distance, distance + NUM_USERS);
+    int max = max_element(distance, distance + NUM_USERS)[0];
     neighbors[i] = max;
     distance[max] = 0;
   }
@@ -191,14 +189,14 @@ double* KNN::getNeighbors(int user, int movie){
 
 }
 
-double KNN::getRating(int user, int movie, int[] neighbors){
+double KNN::getRating(int user, int movie, int *neighbors){
   int sum = 0;
   int count = 0;
   for (int i = 0; i < K; i++){
     if (users[neighbors[i]][movie]!= 0){
       count += 1;
     }
-    sum += users[neighbors[i]][movie]
+    sum += users[neighbors[i]][movie];
   }
   if(count == 0){
     return averages[movie];
@@ -207,7 +205,7 @@ double KNN::getRating(int user, int movie, int[] neighbors){
 }
 
 
-double KNN::write_results(string test_file, string output_file){
+void KNN::write_results(string write_file){
   ifstream qual_data(FILE_PATH_QUAL);
   ofstream qual_results;
   qual_results.open(write_file);
@@ -253,7 +251,7 @@ int main(int argc, char* argv[])
 {
 
   KNN test_KNN = KNN(5);
-  test_KNN.LoadData(FILE_PATH_SMALL)
+  test_KNN.LoadData(FILE_PATH_SMALL);
   test_KNN.write_results(RESULTS_FILE_PATH_QUAL);
   return 0;
 
