@@ -36,8 +36,8 @@ using namespace std;
 class KNN{
   public:
     int K;
-    int ** users;
-    double *averages;
+    vector<user_val> users = new vector<user_val>;
+    vector<user_val> averages = new vector<user_val>;
 
     KNN(int Kval);
     ~KNN();
@@ -50,35 +50,11 @@ class KNN{
 
 KNN::KNN(int Kval){
   K = Kval;
-  averages = new double[NUM_MOVIES];
-  users = new int*[NUM_USERS];
-
-  for(int i = 0; i < NUM_USERS; i++){
-      users[i] = new int[NUM_MOVIES];
-  }
-
-    // init qi to all 0.1
-  for (int n = 0; n < NUM_USERS; n++){
-    for (int m = 0; m < NUM_MOVIES; m++){
-      users[n][m] = 0;
-    }
-	}
-
-  for (int n = 0; n < NUM_USERS; n++)
-  {
-    averages[n] = 0;
-  }
-
 }
 
 // Destructor
 KNN::~KNN() {
-  delete[] averages;
-  delete[] users;
-  for (int i = 0; i < NUM_MOVIES; i++)
-  {
-    delete users[i];
-  }
+
 }
 
 
@@ -101,7 +77,11 @@ void KNN::LoadData(string train_file){
     // Change from 1-indexed to 0-indexed
     u = u - 1;
     i = i - 1;
-    users[u][i] = r;
+    cout << u << " " << i << endl;
+    cout << NUM_USERS << " " << NUM_MOVIES << endl;
+    if (u < NUM_USERS && i < NUM_MOVIES){
+      users[u][i] = r;
+    }
   }
   infile.close();
 
@@ -250,7 +230,7 @@ int main(int argc, char* argv[])
   cout << "create KNN object" << endl;
   KNN test_KNN = KNN(5);
   cout << "load data" << endl;
-  test_KNN.LoadData(FILE_PATH_SMALL);
+  test_KNN.LoadData(FILE_PATH_SMALLER);
   cout << "write results" << endl;
 
   test_KNN.write_results(FILE_PATH_QUAL, RESULTS_FILE_PATH_QUAL);
