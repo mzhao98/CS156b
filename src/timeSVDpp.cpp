@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <cmath>
@@ -9,6 +10,7 @@
 #include <string>
 #include <unistd.h>
 #include <chrono>
+#include <unordered_map>
 
 using namespace std;
 using namespace std::chrono;
@@ -17,6 +19,7 @@ using namespace std::chrono;
 
 #define NUM_USERS 458293
 #define NUM_MOVIES 17770
+#define MAX_DATE 2243
 #define FILE_PATH_ALL     "../data/all.dta"
 #define FILE_PATH_SMALLER "../data/smaller.dta"
 #define FILE_PATH_SMALLE "../data/smalle.dta"
@@ -36,11 +39,13 @@ using namespace std::chrono;
 struct movie_rating {
     int movie;
     int rating;
+    int date;
 };
 
 struct user_data {
     int user_id;
     vector<movie_rating> ratings;
+    double mean_date;
 };
 
 
@@ -54,15 +59,25 @@ class SVDpp{
        */
       double *bu;  // bias for users
       double *bi;  // bias for movies
+      double **but; // bias for users and time
+      double **bibin; // bias for movies and time bins
+      double *au; // time dependency term for each user
       double **pu; // matrix of users
       double **qi; // matrix of movies
       vector<user_data> all_ratings;
+      unordered_map <int, int> user_data_map;
       int k;       // number of latent factors
+      double beta; // regularization for time term
       double reg1; // first regularization term
       double reg2; // second regularization term
-      double eta;  // the learning
+      double reg3; // third regularization term - used for bibin
+      double reg4; // 4th regularization term - used for au
+      double eta1;  // the learning
+      double eta2; // used in au
       double **y_factor; // matrix of item factors, users x movies size
       double **Ru_array; // user x factors size
+      int n_bins;
+      int max_date;
 
       //double **y;  // matrix of factor vectors for y_i
       // int *Ru;
@@ -70,10 +85,11 @@ class SVDpp{
       // double **data; /* input data matrix */
       // std::string train_filename;
 
-      SVDpp(int k_factors, double regularize1, double regularize2, double learning_rate); // Constructor
+      SVDpp(int bins, int k_factors, double regularize1, double regularize2,
+            double regularize3, double regularize4, double et1, double et2, double b); // Constructor
       ~SVDpp(); // destructor
       void getData(string train_file);
-      double predict(double *curr_pu, double *curr_qi, double curr_bu, double curr_bi, double * ru_factor_sum);
+      double predict(int user, int movie, int date, double * ru_factor_sum);
       void train();
       double get_error();
       void validate(string valid_file);
@@ -91,14 +107,26 @@ class SVDpp{
  */
 
 
- SVDpp::SVDpp(int k_factors, double regularize1, double regularize2, double learning_rate) {
+ SVDpp::SVDpp(int bins, int k_factors, double regularize1, double regularize2,
+              double regularize3, double regularize4, double et1, double et2,
+              double b) {
    reg1 = regularize1;
    reg2 = regularize2;
-   eta = learning_rate;
+   reg3 = regularize3;
+   reg4 = regularize4;
+   eta1 = et1;
+   eta2 = et2;
+   beta = b;
 
+   n_bins = bins;
    k = k_factors;
    bu = new double[NUM_USERS];   // user biases
    bi = new double[NUM_MOVIES];  // movie biases
+
+   but = new double*[NUM_USERS]; // bias for users and time
+   bibin = new double*[NUM_MOVIES]; // bias for movies and time bins
+   au = new double[NUM_USERS]; // time dependency term for each user
+
    // Ru = new int[NUM_USERS];   // number of movies a user has rated
    pu = new double*[NUM_USERS];  // user matrix
    qi = new double*[NUM_MOVIES]; // movie matrix
@@ -106,14 +134,22 @@ class SVDpp{
    Ru_array = new double*[NUM_USERS];
 
 
-   // init the bu and bi bias arrays
+   // init the bu, bi, but, bibin, and au bias arrays
    for (int i = 0; i < NUM_USERS; i++){
       bu[i] = 0.0;
+      au[i] = 0.0;
+      but[i] = new double[MAX_DATE];
+      for (int j = 0; j < MAX_DATE; j++){
+        but[i][j] = 0.0;
+      }
    }
 
-   for (int i = 0; i < NUM_MOVIES; i++){
+   for (int i = 0; i < NUM_MOVIES; i++) {
      bi[i] = 0.0;
-
+     bibin[i] = new double[n_bins];
+     for (int j = 0; j < n_bins; j++) {
+       bibin[i][j] = 0.0;
+     }
    }
 
    // Create random number generator for generating from -0.5 to 0.5
@@ -155,17 +191,22 @@ class SVDpp{
 SVDpp::~SVDpp() {
   delete[] bu;
   delete[] bi;
+  delete[] au;
   for (int i = 0; i < NUM_USERS; i++){
     delete[] pu[i];
     delete[] Ru_array[i];
+    delete[] but[i];
   }
   for(int i = 0; i < NUM_MOVIES; i++){
     delete[] qi[i];
     delete[] y_factor[i];
+    delete[] bibin[i];
   }
   delete[] pu;
   delete[] qi;
   delete[] y_factor;
+  delete[] but;
+  delete[] bibin;
   all_ratings.clear();
 
 }
@@ -178,6 +219,8 @@ void SVDpp::getData(string train_file){
   int curr_user = 0;
   int u, i, d, y;
   bool not_finished = true;
+  double sum_dates = 0;
+  int user_data_counter = 0;
 
   /* The below commented code shuffles the lines in the training data */
   // ***********************************************************************
@@ -205,6 +248,7 @@ void SVDpp::getData(string train_file){
       // Change from 1-indexed to 0-indexed
       u = u - 1;
       i = i - 1;
+      d = d - 1;
       curr_user = u;
     }
 
@@ -218,17 +262,23 @@ void SVDpp::getData(string train_file){
       curr_user_data.user_id = prev_user;
       // add curr_user_data to the big array
       curr_user_data.ratings = curr_user_ratings_copy;
+      curr_user_data.mean_date = sum_dates / curr_user_ratings_copy.size();
       // add user into big array
       all_ratings.push_back(curr_user_data);
+      user_data_map[user_u] = user_data_counter;
 
       // clear the list of movie ratings
       curr_user_ratings.clear();
+      sum_dates = 0;
+      user_data_counter += 1;
     }
     else {
       // create a movie_rating
       movie_rating mr;
       mr.movie = i;
       mr.rating = y;
+      mr.date = d;
+      sum_dates += d;
       curr_user_ratings.push_back(mr);
     }
     prev_user = curr_user;
@@ -265,20 +315,27 @@ void SVDpp::train(){
 
       int movie_i = curr_movie_rating.movie;
       int rating_y = curr_movie_rating.rating;
+      int date_d = curr_movie_rating.date;
+      int bin_b = (date_d / MAX_DATE) * n_bins;
 
       // to define
-      double error = rating_y - predict(pu[user_u], qi[movie_i],
-                     bu[user_u], bi[movie_i], factor_sum);
+      double error = rating_y - predict(user_u, movie_i, date_d, factor_sum);
 
-      bu[user_u] += eta * (error - reg1 * bu[user_u]);
-      bi[movie_i] += eta * (error - reg1 * bi[movie_i]);
+      bu[user_u] += eta1 * (error - reg1 * bu[user_u]);
+      bi[movie_i] += eta1 * (error - reg1 * bi[movie_i]);
+      but[user_u][date_d] += eta1 * (error - reg1 * but[user_u][date_d]);
+      bibin[movie_i][bin_b] += eta1 * (error - reg3 * bibin[movie_i][bin_b]);
+
+      double time_diff = date_d - curr_user_data.mean_date;
+      double devu = (time_diff>0)-(time_diff<0) * pow(abs(time_diff), beta);
+      au[user_u] += eta2 * (error * devu - reg4 * au[user_u]);
 
       for (int j = 0; j < k; j++){
         grad_pu[j] = reg2 * pu[user_u][j] - error * qi[movie_i][j];
         grad_qi[j] = reg2 * qi[movie_i][j] - error * (pu[user_u][j] +
                      factor_sum[j]);
-        pu[user_u][j] = pu[user_u][j] - eta * grad_pu[j];
-        qi[movie_i][j] = qi[movie_i][j] - eta * grad_qi[j];
+        pu[user_u][j] = pu[user_u][j] - eta1 * grad_pu[j];
+        qi[movie_i][j] = qi[movie_i][j] - eta1 * grad_qi[j];
       }
 
       // Update Ru_array for user_u for each factor f
@@ -293,10 +350,9 @@ void SVDpp::train(){
     for (int j = 0; j < Ru_size; j++) {
       movie_rating mr = curr_user_data.ratings[j];
       double error = mr.rating - predict(
-                     pu[user_u], qi[mr.movie],
-                     bu[user_u], bi[mr.movie], factor_sum);
+                     user_u, mr.movie, mr.date, factor_sum);
       for (int f = 0; f < k; f++) {
-        y_factor[mr.movie][f] += eta * (error * ru_sqrt * qi[mr.movie][f]
+        y_factor[mr.movie][f] += eta1 * (error * ru_sqrt * qi[mr.movie][f]
                                 - reg2 * y_factor[mr.movie][f]);
       }
     }
@@ -317,15 +373,26 @@ void SVDpp::train(){
  * @param curr_bu : corresponding user bias term
  * @param curr_bi : corresponding movie bias term
  */
-double SVDpp::predict(double *curr_pu, double *curr_qi, double curr_bu,
-                      double curr_bi, double *ru_factor_sum) {
+double SVDpp::predict(int curr_user, int curr_movie, int curr_time,
+                      double *ru_factor_sum) {
   double product = 0;
+  double time_diff = 0.0;
 
   for (int i = 0; i < k; i++){
-      product += (curr_pu[i] * (curr_qi[i] + ru_factor_sum[i]));
+      product += (pu[curr_user][i] * (qi[curr_movie][i] + ru_factor_sum[i]));
   }
-  product += (curr_bu + curr_bi + GLOBAL_MEAN);
+  product += bu[curr_user] + bi[curr_movie] + GLOBAL_MEAN;
+
+  if (user_data_map.find(curr_user) != user_data_map.end()) {
+    time_diff = curr_time - all_ratings[user_data_map[curr_user]].mean_date;
+  }
+  double devu = ((time_diff>0)-(time_diff<0)) * pow(abs(time_diff), beta);
+  int curr_bin = (curr_time / MAX_DATE) * n_bins;
+  product += au[curr_user] + devu + but[curr_user][curr_time] +
+             bibin[curr_movie][curr_bin];
+
   //cout << "predict_result" << product << endl;
+
   return product;
 }
 
@@ -351,8 +418,9 @@ void SVDpp::validate(string valid_file){
     if (!(iss >> u >> i >> d >> y)) { break; }
     u = u - 1;
     i = i - 1;
+    d = d - 1;
     // cout << qual_line << "\n";
-    rating = predict(pu[u], qi[i], bu[u], bi[i], Ru_array[u]);
+    rating = predict(u, i, d, Ru_array[u]);
     // cout << "prediction " << rating << "\n";
     if (rating > 5.0) {
       rating = 5.0;
@@ -396,8 +464,9 @@ void SVDpp::write_results(string write_file, string in_file){
     if (!(iss >> u >> i >> d)) { break; }
     u = u - 1;
     i = i - 1;
+    d = d - 1;
     // cout << qual_line << "\n";
-    rating = predict(pu[u], qi[i], bu[u], bi[i], Ru_array[u]);
+    rating = predict(u, i, d, Ru_array[u]);
     // cout << "prediction " << rating << "\n";
     if (rating > 5.0) {
       rating = 5.0;
@@ -415,15 +484,22 @@ void SVDpp::write_results(string write_file, string in_file){
 
 int main(int argc, char* argv[])
 {
-  int latent_factors = 200;
+  int latent_factors = 50;
   int epochs = 30;
-  double reg1 = 0.02;
+  double reg1 = 0.005;
   double reg2 = 0.015;
-  double learning_rate = 0.005;
+  double reg3 = 0.08;
+  double reg4 = 0.0004;
+  double eta1 = 0.007;
+  double eta2 = 0.00001;
+  int bins = 30;
+  double beta = 0.4;
+
   cout << "creating svdpp" << endl;
-  SVDpp* test_svd = new SVDpp(latent_factors, reg1, reg2, learning_rate);
+  SVDpp* test_svd = new SVDpp(bins, latent_factors, reg1, reg2, reg3, reg4, eta1,
+                              eta2, beta);
   high_resolution_clock::time_point t1 = high_resolution_clock::now();
-  test_svd->getData(OUTPUT_FILE_PATH_1);
+  test_svd->getData(FILE_PATH_SMALL);
   cout << "data obtained. training now" << endl;
   high_resolution_clock::time_point t2 = high_resolution_clock::now();
   auto duration = duration_cast<microseconds>( t2 - t1 ).count();
@@ -432,7 +508,7 @@ int main(int argc, char* argv[])
     high_resolution_clock::time_point t1 = high_resolution_clock::now();
     cout << iter << "\n";
     test_svd->train();
-    test_svd->eta *= 0.9;
+    eta1 *= 0.9; // scale down the learning rate
     high_resolution_clock::time_point t2 = high_resolution_clock::now();
     auto duration = duration_cast<microseconds>( t2 - t1 ).count();
     cout << (duration* (.000001)) << "\n";
