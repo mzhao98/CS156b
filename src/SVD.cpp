@@ -31,7 +31,7 @@ using namespace std::chrono;
 #define RESULTS_FILE_PATH_QUAL "../data/results_qual.dta"
 #define SHUFFLED_DATA "../data/shuf.dta"
 
-#define GLOBAL_MEAN 3.5126
+#define GLOBAL_MEAN 3.60952
 
 struct movie_rating {
     int user;
@@ -110,9 +110,10 @@ SVD::SVD(int k_factors, double regularize1, double regularize2, double learning_
     }
 
     // Create random number generator for generating from -0.5 to 0.5
+    double upper_dis = 0.1 * (1.0 / (sqrt(k)));
     std::random_device rd;  //Will be used to obtain a seed for the random number engine
     std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
-    std::uniform_real_distribution<double> dis(0, 0.0005); // Uniform distribution
+    std::uniform_real_distribution<double> dis(0, upper_dis); // Uniform distribution
 
     // initialize pu to small random variables
     int n, m;
@@ -242,6 +243,13 @@ double SVD::predict(double *curr_pu, double *curr_qi, double curr_bu, double cur
     }
     product += (curr_bu + curr_bi + GLOBAL_MEAN);
     //cout << "predict_result" << product << endl;
+    if (product > 5.0) {
+      product = 5.0;
+    }
+    else if (product < 1.0) {
+      product = 1.0;
+    }
+
     return product;
 }
 
@@ -285,12 +293,6 @@ void SVD::validate(string valid_file){
     // cout << qual_line << "\n";
     rating = predict(pu[u], qi[i], bu[u], bi[i]);
     // cout << "prediction " << rating << "\n";
-    if (rating > 5.0) {
-      rating = 5.0;
-    }
-    else if (rating < 1.0) {
-      rating = 1.0;
-    }
 
     error_sum += (y - rating) * (y - rating);
     counter += 1;
@@ -330,12 +332,7 @@ void SVD::write_results(string write_file, string in_file){
     // cout << qual_line << "\n";
     rating = predict(pu[u], qi[i], bu[u], bi[i]);
     // cout << "prediction " << rating << "\n";
-    if (rating > 5.0) {
-      rating = 5.0;
-    }
-    else if (rating < 1.0) {
-      rating = 1.0;
-    }
+
     qual_results << rating << "\n";
   }
   cout << "finished writing predictions" << "\n";
@@ -347,13 +344,13 @@ void SVD::write_results(string write_file, string in_file){
 int main(int argc, char* argv[])
 {
   int latent_factors = 200;
-  int epochs = 50;
+  int epochs = 30;
   double reg1 = 0.02;
   double reg2 = 0.015;
   double learning_rate = 0.005;
   SVD* test_svd = new SVD(latent_factors, reg1, reg2, learning_rate);
   high_resolution_clock::time_point t1 = high_resolution_clock::now();
-  test_svd->getData(OUTPUT_FILE_PATH_1);
+  test_svd->getData(FILE_PATH_SMALL);
   high_resolution_clock::time_point t2 = high_resolution_clock::now();
   auto duration = duration_cast<microseconds>( t2 - t1 ).count();
   cout << (duration* (.000001)) << "\n";

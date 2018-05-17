@@ -34,7 +34,7 @@ using namespace std::chrono;
 #define RESULTS_FILE_PATH_QUAL "../data/results_qual.dta"
 #define SHUFFLED_DATA "../data/shuf.dta"
 
-#define GLOBAL_MEAN 3.5126
+#define GLOBAL_MEAN 3.60952
 
 struct movie_rating {
     int movie;
@@ -153,9 +153,10 @@ class SVDpp{
    }
 
    // Create random number generator for generating from -0.5 to 0.5
+   double upper_dis = 0.1 * (1.0 / (sqrt(k)));
    std::random_device rd;  //Will be used to obtain a seed for the random number engine
    std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
-   std::uniform_real_distribution<double> dis(0, 0.0005); // Uniform distribution
+   std::uniform_real_distribution<double> dis(0, upper_dis); // Uniform distribution
 
    // create 2D array pu
    for(int i = 0; i < NUM_USERS; i++){
@@ -299,7 +300,13 @@ void SVDpp::train(){
       factor_sum[i] = 0.0;
     }
 
-    double ru_sqrt = pow(double(Ru_size), -0.5);
+
+    double ru_sqrt = 0.0;
+
+    if (Ru_size > 1) {
+        ru_sqrt = pow(double(Ru_size), -0.5);
+    }
+
     // Sum for all movies rated by this user
     for (int i = 0; i < Ru_size; i++) {
       for (int j = 0; j < k; j++){
@@ -485,21 +492,21 @@ void SVDpp::write_results(string write_file, string in_file){
 int main(int argc, char* argv[])
 {
   int latent_factors = 50;
-  int epochs = 30;
+  int epochs = 1;
   double reg1 = 0.005;
   double reg2 = 0.015;
   double reg3 = 0.08;
   double reg4 = 0.0004;
   double eta1 = 0.007;
   double eta2 = 0.00001;
-  int bins = 30;
+  int bins = 25;
   double beta = 0.4;
 
   cout << "creating svdpp" << endl;
   SVDpp* test_svd = new SVDpp(bins, latent_factors, reg1, reg2, reg3, reg4, eta1,
                               eta2, beta);
   high_resolution_clock::time_point t1 = high_resolution_clock::now();
-  test_svd->getData(FILE_PATH_SMALL);
+  test_svd->getData(OUTPUT_FILE_PATH_1);
   cout << "data obtained. training now" << endl;
   high_resolution_clock::time_point t2 = high_resolution_clock::now();
   auto duration = duration_cast<microseconds>( t2 - t1 ).count();
@@ -508,7 +515,7 @@ int main(int argc, char* argv[])
     high_resolution_clock::time_point t1 = high_resolution_clock::now();
     cout << iter << "\n";
     test_svd->train();
-    eta1 *= 0.9; // scale down the learning rate
+    test_svd->eta1 *= 0.9; // scale down the learning rate
     high_resolution_clock::time_point t2 = high_resolution_clock::now();
     auto duration = duration_cast<microseconds>( t2 - t1 ).count();
     cout << (duration* (.000001)) << "\n";

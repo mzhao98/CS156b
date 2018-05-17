@@ -96,12 +96,13 @@ int find_overall_mean() {
     // y : rating
     int u, i, d, y;
     if (!(iss >> u >> i >> d >> y)) { break; }
+    if (y == 0) { continue; }
     y_correction = y  - correction;
     t_correction = kahan_sum + y_correction;
     correction = (t_correction - kahan_sum) - y_correction;
     kahan_sum = t_correction;
   }
-  double average_rating = kahan_sum / NUM_RATINGS;
+  double average_rating = kahan_sum / 99666408.0;
   cout << average_rating << endl;
 
   return 0;
@@ -111,7 +112,7 @@ int find_overall_mean() {
 
 int main(int argc, char* argv[])
 {
-  parse_by_index();
+  find_overall_mean();
   return 0;
 
 }
