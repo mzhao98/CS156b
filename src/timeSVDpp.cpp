@@ -11,6 +11,7 @@
 #include <unistd.h>
 #include <chrono>
 #include <unordered_map>
+#include <math.h>
 
 using namespace std;
 using namespace std::chrono;
@@ -88,6 +89,8 @@ class SVDpp{
       SVDpp(int bins, int k_factors, double regularize1, double regularize2,
             double regularize3, double regularize4, double et1, double et2, double b); // Constructor
       ~SVDpp(); // destructor
+      int getSign(double time_diff);
+      int getBinNumber(int date);
       void getData(string train_file);
       double predict(int user, int movie, int date, double * ru_factor_sum);
       void train();
@@ -212,6 +215,15 @@ SVDpp::~SVDpp() {
 
 }
 
+int SVDpp::getSign(double time_diff) {
+  if (time_diff > 0) { return 1; }
+  else { return 0; }
+}
+
+int SVDpp::getBinNumber(int date) {
+  int bin_size = (MAX_DATE / n_bins) + 1;
+  return (date/bin_size);
+}
 
 void SVDpp::getData(string train_file){
 
@@ -303,7 +315,7 @@ void SVDpp::train(){
 
     double ru_sqrt = 0.0;
 
-    if (Ru_size > 1) {
+    if (Ru_size >= 1) {
         ru_sqrt = pow(double(Ru_size), -0.5);
     }
 
@@ -323,7 +335,7 @@ void SVDpp::train(){
       int movie_i = curr_movie_rating.movie;
       int rating_y = curr_movie_rating.rating;
       int date_d = curr_movie_rating.date;
-      int bin_b = (date_d / MAX_DATE) * n_bins;
+      int bin_b = getBinNumber(date_d);
 
       // to define
       double error = rating_y - predict(user_u, movie_i, date_d, factor_sum);
@@ -334,7 +346,7 @@ void SVDpp::train(){
       bibin[movie_i][bin_b] += eta1 * (error - reg3 * bibin[movie_i][bin_b]);
 
       double time_diff = date_d - curr_user_data.mean_date;
-      double devu = (time_diff>0)-(time_diff<0) * pow(abs(time_diff), beta);
+      double devu = getSign(time_diff) * pow(abs(time_diff), beta);
       au[user_u] += eta2 * (error * devu - reg4 * au[user_u]);
 
       for (int j = 0; j < k; j++){
@@ -359,8 +371,12 @@ void SVDpp::train(){
       double error = mr.rating - predict(
                      user_u, mr.movie, mr.date, factor_sum);
       for (int f = 0; f < k; f++) {
+        // testing this factor sum update out, it may not be better
+        double old_y = y_factor[mr.movie][f];
         y_factor[mr.movie][f] += eta1 * (error * ru_sqrt * qi[mr.movie][f]
                                 - reg2 * y_factor[mr.movie][f]);
+        factor_sum[f] += (y_factor[mr.movie][f] * ru_sqrt) - old_y;
+
       }
     }
 
@@ -382,20 +398,20 @@ void SVDpp::train(){
  */
 double SVDpp::predict(int curr_user, int curr_movie, int curr_time,
                       double *ru_factor_sum) {
-  double product = 0;
+  double product = 0.0;
   double time_diff = 0.0;
 
   for (int i = 0; i < k; i++){
-      product += (pu[curr_user][i] * (qi[curr_movie][i] + ru_factor_sum[i]));
+      product += (pu[curr_user][i] + ru_factor_sum[i]) * qi[curr_movie][i];
   }
   product += bu[curr_user] + bi[curr_movie] + GLOBAL_MEAN;
 
   if (user_data_map.find(curr_user) != user_data_map.end()) {
     time_diff = curr_time - all_ratings[user_data_map[curr_user]].mean_date;
   }
-  double devu = ((time_diff>0)-(time_diff<0)) * pow(abs(time_diff), beta);
-  int curr_bin = (curr_time / MAX_DATE) * n_bins;
-  product += au[curr_user] + devu + but[curr_user][curr_time] +
+  double devu = getSign(time_diff) * pow(abs(time_diff), beta);
+  int curr_bin = getBinNumber(curr_time);
+  product += au[curr_user] * devu + but[curr_user][curr_time] +
              bibin[curr_movie][curr_bin];
 
   //cout << "predict_result" << product << endl;
@@ -491,7 +507,7 @@ void SVDpp::write_results(string write_file, string in_file){
 
 int main(int argc, char* argv[])
 {
-  int latent_factors = 50;
+  int latent_factors = 200;
   int epochs = 1;
   double reg1 = 0.005;
   double reg2 = 0.015;
@@ -499,7 +515,7 @@ int main(int argc, char* argv[])
   double reg4 = 0.0004;
   double eta1 = 0.007;
   double eta2 = 0.00001;
-  int bins = 25;
+  int bins = 30;
   double beta = 0.4;
 
   cout << "creating svdpp" << endl;

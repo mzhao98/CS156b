@@ -345,10 +345,10 @@ void SVD::write_results(string write_file, string in_file){
 int main(int argc, char* argv[])
 {
   int latent_factors = 200;
-  int epochs = 100;
-  double reg1 = 0.02;
+  int epochs = 25;
+  double reg1 = 0.05;
   double reg2 = 0.015;
-  double learning_rate = 0.005;
+  double learning_rate = 0.002;
   SVD* test_svd = new SVD(latent_factors, reg1, reg2, learning_rate);
   high_resolution_clock::time_point t1 = high_resolution_clock::now();
   test_svd->getData(OUTPUT_FILE_PATH_6);
