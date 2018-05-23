@@ -16,6 +16,7 @@ using namespace std;
 #define OUTPUT_FILE_PATH_2 "../data/output_valid.dta"
 #define OUTPUT_FILE_PATH_3 "../data/output_hidden.dta"
 #define OUTPUT_FILE_PATH_4 "../data/output_probe.dta"
+#define OUTPUT_FILE_PATH_6 "../data/output_noqual.dta"
 #define NUM_RATINGS 102416306.0
 
 
@@ -75,6 +76,42 @@ int parse_by_index() {
 }
 
 /*
+ * Gets all data except for qual
+*/
+int all_but_qual() {
+  ifstream all_data_file(FILE_PATH_ALL);
+  ifstream idx_file(IDX_FILE);
+  ofstream out_file_6;
+
+  string data_line;
+  string idx_line;
+  int index;
+
+  // if (!out_file_1) {
+  //       cout << "Unable to open file";
+  //       exit(1);
+  //   }
+  out_file_6.open(OUTPUT_FILE_PATH_6);
+
+  while (getline(all_data_file, data_line) && getline(idx_file, idx_line)) {
+    istringstream iss_idx(idx_line);
+    istringstream iss_data(data_line);
+
+    if (!(iss_idx >> index)) { break; }
+
+    if (index != 5) {
+      out_file_6 << data_line << "\n";
+    }
+  }
+
+  out_file_6.close();
+  idx_file.close();
+  all_data_file.close();
+
+  return 0;
+}
+
+/*
  * This function finds the overall mean of ratings in the all.dta file.
  */
 int find_overall_mean() {
@@ -112,7 +149,7 @@ int find_overall_mean() {
 
 int main(int argc, char* argv[])
 {
-  find_overall_mean();
+  all_but_qual();
   return 0;
 
 }

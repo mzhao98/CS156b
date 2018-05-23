@@ -27,6 +27,7 @@ using namespace std::chrono;
 #define OUTPUT_FILE_PATH_2 "../data/output_valid.dta"
 #define OUTPUT_FILE_PATH_3 "../data/output_hidden.dta"
 #define OUTPUT_FILE_PATH_4 "../data/output_probe.dta"
+#define OUTPUT_FILE_PATH_6 "../data/output_noqual.dta"
 
 #define RESULTS_FILE_PATH_QUAL "../data/results_qual.dta"
 #define SHUFFLED_DATA "../data/shuf.dta"
@@ -344,13 +345,13 @@ void SVD::write_results(string write_file, string in_file){
 int main(int argc, char* argv[])
 {
   int latent_factors = 200;
-  int epochs = 30;
+  int epochs = 100;
   double reg1 = 0.02;
   double reg2 = 0.015;
   double learning_rate = 0.005;
   SVD* test_svd = new SVD(latent_factors, reg1, reg2, learning_rate);
   high_resolution_clock::time_point t1 = high_resolution_clock::now();
-  test_svd->getData(FILE_PATH_SMALL);
+  test_svd->getData(OUTPUT_FILE_PATH_1);
   high_resolution_clock::time_point t2 = high_resolution_clock::now();
   auto duration = duration_cast<microseconds>( t2 - t1 ).count();
   cout << (duration* (.000001)) << "\n";

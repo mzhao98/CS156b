@@ -169,7 +169,7 @@ class SVDpp{
    for (n = 0; n < NUM_USERS; n++){
      for (m = 0; m < k; m++){
        pu[n][m] = dis(gen);
-       Ru_array[n][m] = 0.0;
+       Ru_array[n][m] = dis(gen);
      }
     }
 

@@ -27,6 +27,7 @@ using namespace std::chrono;
 #define OUTPUT_FILE_PATH_2 "../data/output_valid.dta"
 #define OUTPUT_FILE_PATH_3 "../data/output_hidden.dta"
 #define OUTPUT_FILE_PATH_4 "../data/output_probe.dta"
+#define OUTPUT_FILE_PATH_6 "../data/output_noqual.dta"
 
 #define RESULTS_FILE_PATH_QUAL "../data/results_qual.dta"
 #define SHUFFLED_DATA "../data/shuf.dta"
