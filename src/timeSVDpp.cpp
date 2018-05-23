@@ -371,12 +371,8 @@ void SVDpp::train(){
       double error = mr.rating - predict(
                      user_u, mr.movie, mr.date, factor_sum);
       for (int f = 0; f < k; f++) {
-        // testing this factor sum update out, it may not be better
-        double old_y = y_factor[mr.movie][f];
         y_factor[mr.movie][f] += eta1 * (error * ru_sqrt * qi[mr.movie][f]
                                 - reg2 * y_factor[mr.movie][f]);
-        factor_sum[f] += (y_factor[mr.movie][f] * ru_sqrt) - old_y;
-
       }
     }
 
@@ -518,7 +514,7 @@ int main(int argc, char* argv[])
   int bins = 30;
   double beta = 0.4;
 
-  cout << "creating svdpp" << endl;
+  cout << "creating timesvdpp" << endl;
   SVDpp* test_svd = new SVDpp(bins, latent_factors, reg1, reg2, reg3, reg4, eta1,
                               eta2, beta);
   high_resolution_clock::time_point t1 = high_resolution_clock::now();
