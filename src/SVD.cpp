@@ -351,7 +351,7 @@ int main(int argc, char* argv[])
   double learning_rate = 0.005;
   SVD* test_svd = new SVD(latent_factors, reg1, reg2, learning_rate);
   high_resolution_clock::time_point t1 = high_resolution_clock::now();
-  test_svd->getData(OUTPUT_FILE_PATH_1);
+  test_svd->getData(OUTPUT_FILE_PATH_6);
   high_resolution_clock::time_point t2 = high_resolution_clock::now();
   auto duration = duration_cast<microseconds>( t2 - t1 ).count();
   cout << (duration* (.000001)) << "\n";

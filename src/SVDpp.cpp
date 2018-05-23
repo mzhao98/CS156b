@@ -427,7 +427,7 @@ int main(int argc, char* argv[])
   cout << "creating svdpp" << endl;
   SVDpp* test_svd = new SVDpp(latent_factors, reg1, reg2, learning_rate);
   high_resolution_clock::time_point t1 = high_resolution_clock::now();
-  test_svd->getData(FILE_PATH_SMALL);
+  test_svd->getData(OUTPUT_FILE_PATH_6);
   cout << "data obtained. training now" << endl;
   high_resolution_clock::time_point t2 = high_resolution_clock::now();
   auto duration = duration_cast<microseconds>( t2 - t1 ).count();
