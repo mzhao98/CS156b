@@ -13,6 +13,8 @@ using namespace std;
 #define FILE_PATH_ALL      "../data/all.dta"
 
 #define FILE_PATH_SMALLER  "../data/smaller.dta"
+#define FILE_PATH_PROBE_ACTUAL   "../data/probe_actual.dta"
+#define FILE_PATH_PROBE_DATA   "../data/probe_data.dta"
 #define OUTPUT_FILE_PATH_1 "../data/output_base.dta"
 #define OUTPUT_FILE_PATH_2 "../data/output_valid.dta"
 #define OUTPUT_FILE_PATH_3 "../data/output_hidden.dta"
@@ -149,6 +151,80 @@ int all_but_qual_and_probe() {
   return 0;
 }
 
+int get_probe_items() {
+  ifstream all_data_file(FILE_PATH_ALL);
+  ifstream idx_file(IDX_FILE);
+  ofstream probe_file;
+
+  string data_line;
+  string idx_line;
+  int index;
+
+  // if (!out_file_1) {
+  //       cout << "Unable to open file";
+  //       exit(1);
+  //   }
+  probe_file.open(FILE_PATH_PROBE_DATA);
+
+  while (getline(all_data_file, data_line) && getline(idx_file, idx_line)) {
+    istringstream iss_idx(idx_line);
+    istringstream iss_data(data_line);
+
+    if (!(iss_idx >> index)) { break; }
+
+    if (index == 4) {
+      int u, i, d, y;
+      if (!(iss_data >> u >> i >> d >> y)) { break; }
+      probe_file << u << i << "\n";
+    }
+  }
+
+  probe_file.close();
+  idx_file.close();
+  all_data_file.close();
+
+  return 0;
+
+}
+/*
+ * Gets all data except for qual
+*/
+int get_probe_results() {
+  ifstream all_data_file(FILE_PATH_ALL);
+  ifstream idx_file(IDX_FILE);
+  ofstream probe_file;
+
+  string data_line;
+  string idx_line;
+  int index;
+
+  // if (!out_file_1) {
+  //       cout << "Unable to open file";
+  //       exit(1);
+  //   }
+  probe_file.open(FILE_PATH_PROBE_ACTUAL);
+
+  while (getline(all_data_file, data_line) && getline(idx_file, idx_line)) {
+    istringstream iss_idx(idx_line);
+    istringstream iss_data(data_line);
+
+    if (!(iss_idx >> index)) { break; }
+
+    if (index == 4) {
+      int u, i, d, y;
+      if (!(iss_data >> u >> i >> d >> y)) { break; }
+      probe_file << y << "\n";
+    }
+  }
+
+  probe_file.close();
+  idx_file.close();
+  all_data_file.close();
+
+  return 0;
+}
+
+
 /*
  * This function finds the overall mean of ratings in the all.dta file.
  */
@@ -187,7 +263,7 @@ int find_overall_mean() {
 
 int main(int argc, char* argv[])
 {
-  all_but_qual_and_probe();
+  get_probe_items();
   return 0;
 
 }
