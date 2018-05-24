@@ -27,6 +27,10 @@ using namespace std::chrono;
 #define FILE_PATH_SMALL "../data/small.dta"
 
 #define FILE_PATH_QUAL    "../data/qual.dta"
+#define FILE_PATH_PROBE_DATA   "../data/probe_only.dta"
+// change the below filename every time you run SVD
+#define FILE_PATH_PROBE_RESULTS "../data/probe_results_timeSVDpp.dta"
+
 #define OUTPUT_FILE_PATH_1 "../data/output_base.dta"
 #define OUTPUT_FILE_PATH_2 "../data/output_valid.dta"
 #define OUTPUT_FILE_PATH_3 "../data/output_hidden.dta"
@@ -535,6 +539,7 @@ int main(int argc, char* argv[])
 
   test_svd->validate(OUTPUT_FILE_PATH_2);
   test_svd->write_results(RESULTS_FILE_PATH_QUAL, FILE_PATH_QUAL);
+  test_svd->write_results(FILE_PATH_PROBE_RESULTS, FILE_PATH_PROBE_DATA);
   delete test_svd;
   return 0;
 }

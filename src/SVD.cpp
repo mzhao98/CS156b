@@ -23,13 +23,18 @@ using namespace std::chrono;
 #define FILE_PATH_SMALL "../data/small.dta"
 
 #define FILE_PATH_QUAL    "../data/qual.dta"
+#define FILE_PATH_PROBE_DATA   "../data/probe_only.dta"
+// change the below filename every time you run SVD
+#define FILE_PATH_PROBE_RESULTS "../data/probe_results_SVD.dta"
+
 #define OUTPUT_FILE_PATH_1 "../data/output_base.dta"
 #define OUTPUT_FILE_PATH_2 "../data/output_valid.dta"
 #define OUTPUT_FILE_PATH_3 "../data/output_hidden.dta"
 #define OUTPUT_FILE_PATH_4 "../data/output_probe.dta"
 #define OUTPUT_FILE_PATH_6 "../data/output_noqual.dta"
-
+#define OUTPUT_FILE_PATH_7 "../data/output_no_q_p.dta"
 #define RESULTS_FILE_PATH_QUAL "../data/results_qual.dta"
+
 #define SHUFFLED_DATA "../data/shuf.dta"
 
 #define GLOBAL_MEAN 3.60952
@@ -346,9 +351,9 @@ int main(int argc, char* argv[])
 {
   int latent_factors = 200;
   int epochs = 25;
-  double reg1 = 0.05;
+  double reg1 = 0.02;
   double reg2 = 0.015;
-  double learning_rate = 0.002;
+  double learning_rate = 0.005;
   SVD* test_svd = new SVD(latent_factors, reg1, reg2, learning_rate);
   high_resolution_clock::time_point t1 = high_resolution_clock::now();
   test_svd->getData(OUTPUT_FILE_PATH_6);
@@ -366,6 +371,7 @@ int main(int argc, char* argv[])
 
   test_svd->validate(OUTPUT_FILE_PATH_2);
   test_svd->write_results(RESULTS_FILE_PATH_QUAL, FILE_PATH_QUAL);
+  test_svd->write_results(FILE_PATH_PROBE_RESULTS, FILE_PATH_PROBE_DATA);
   delete test_svd;
   return 0;
 }
