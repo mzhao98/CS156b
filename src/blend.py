@@ -28,7 +28,8 @@ def blend(A, s):
     return np.matmul(weights_1, weights_2)
 
 def applyWeights(qual_results, weights):
-    for file in qual_list:
+    qual_Matrix = []
+    for file in qual_results:
         data1 = np.loadtxt(file, delimiter='\n')
         qual_Matrix.append(data1)
     qual_Matrix = np.array(qual_Matrix)
@@ -45,10 +46,12 @@ def applyWeights(qual_results, weights):
 
 
 if __name__ == '__main__':
-    # probe_result_files = [file1, file2, ...]
-    # qual_result_files = [file1, file2, ...]
-    qual_result_files = ['data/test.dta', 'data/test2.dta']
-
+    probe_result_files = [file1, file2, ...]
+    qual_result_files = [file1, file2, ...]
+    # probe_result_files = ['data/test.dta', 'data/test2.dta']
+    # qual_result_files = ['data/test.dta', 'data/test2.dta']
+    # probe_file = 'data/test.dta'
     A,s = getData(probe_result_files, probe_file)
     weights = blend(A, s)
     blended_output = applyWeights(qual_result_files, weights)
+    print(len(blended_output))
