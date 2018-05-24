@@ -51,6 +51,7 @@ struct user_data {
     int user_id;
     vector<movie_rating> ratings;
     double mean_date;
+    double mean_rating;
 };
 
 
@@ -176,7 +177,7 @@ class SVDpp{
    for (n = 0; n < NUM_USERS; n++){
      for (m = 0; m < k; m++){
        pu[n][m] = dis(gen);
-       Ru_array[n][m] = dis(gen);
+       Ru_array[n][m] = 0.0;
      }
     }
 
@@ -236,7 +237,8 @@ void SVDpp::getData(string train_file){
   int curr_user = 0;
   int u, i, d, y;
   bool not_finished = true;
-  double sum_dates = 0;
+  double sum_dates = 0.0;
+  double sum_ratings = 0.0;
   int user_data_counter = 0;
 
   /* The below commented code shuffles the lines in the training data */
@@ -280,6 +282,14 @@ void SVDpp::getData(string train_file){
       // add curr_user_data to the big array
       curr_user_data.ratings = curr_user_ratings_copy;
       curr_user_data.mean_date = sum_dates / curr_user_ratings_copy.size();
+      curr_user_data.mean_rating = sum_ratings / curr_user_ratings_copy.size();
+
+      // modify all movie ratings to be normalized by mean rating
+      // by subtracting the mean rating from each rating
+      for (int i = 0; i < curr_user_data.ratings.size(); i++) {
+        curr_user_data.ratings[i].rating = curr_user_data.ratings[i].rating - curr_user_data.mean_rating;
+      }
+
       // add user into big array
       all_ratings.push_back(curr_user_data);
       user_data_map[user_u] = user_data_counter;
@@ -287,6 +297,7 @@ void SVDpp::getData(string train_file){
       // clear the list of movie ratings
       curr_user_ratings.clear();
       sum_dates = 0;
+      sum_ratings = 0;
       user_data_counter += 1;
     }
     else {
@@ -296,6 +307,7 @@ void SVDpp::getData(string train_file){
       mr.rating = y;
       mr.date = d;
       sum_dates += d;
+      sum_ratings += y;
       curr_user_ratings.push_back(mr);
     }
     prev_user = curr_user;
@@ -444,7 +456,16 @@ void SVDpp::validate(string valid_file){
     d = d - 1;
     // cout << qual_line << "\n";
     rating = predict(u, i, d, Ru_array[u]);
-    // cout << "prediction " << rating << "\n";
+
+    // "denormalize" data by adding user mean rating back in
+    // if user not found in training data, use global mean
+    if (user_data_map.find(u) != user_data_map.end()) {
+      rating += all_ratings[user_data_map[u]].mean_rating;
+    }
+    else {
+      rating += GLOBAL_MEAN;
+    }
+
     if (rating > 5.0) {
       rating = 5.0;
     }
@@ -490,7 +511,16 @@ void SVDpp::write_results(string write_file, string in_file){
     d = d - 1;
     // cout << qual_line << "\n";
     rating = predict(u, i, d, Ru_array[u]);
-    // cout << "prediction " << rating << "\n";
+
+    // "denormalize" data by adding user mean rating back in
+    // if user not found in training data, use global mean
+    if (user_data_map.find(u) != user_data_map.end()) {
+      rating += all_ratings[user_data_map[u]].mean_rating;
+    }
+    else {
+      rating += GLOBAL_MEAN;
+    }
+    
     if (rating > 5.0) {
       rating = 5.0;
     }
